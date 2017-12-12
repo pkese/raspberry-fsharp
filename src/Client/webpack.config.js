@@ -21,6 +21,7 @@ var babelOptions = fableUtils.resolveBabelOptions({
 
 var isProduction = process.argv.indexOf("-p") >= 0;
 var port = process.env.SUAVE_FABLE_PORT || "8085";
+var proxyHost = "192.168.11.90"
 console.log("Bundling for " + (isProduction ? "production" : "development") + "...");
 
 module.exports = {
@@ -37,7 +38,7 @@ module.exports = {
   devServer: {
     proxy: {
       '/api/*': {
-        target: 'http://localhost:' + port,
+        target: `http://${proxyHost}:${port}`,
         changeOrigin: true
       }
     },

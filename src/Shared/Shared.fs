@@ -1,6 +1,9 @@
 namespace Shared
 
-type Counter = int
+open Switches
 
-type Init =
-  { getCounter : unit -> Async<Counter> }
+type SwApp = {
+    getSwitches: unit -> Async<Switches>
+    setSwitch: (Channel*State) -> Async<Switches>
+    setMode: (Channel*SwitchMode) -> Async<Switches>
+  }

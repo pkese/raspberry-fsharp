@@ -7,6 +7,7 @@ open Fable.Helpers.React
 open Fable.Helpers.React.Props
 open Fable.PowerPack.Fetch
 
+open Switches
 open Shared
 
 open Fulma
@@ -15,61 +16,62 @@ open Fulma.Elements
 open Fulma.Components
 open Fulma.BulmaClasses
 
-type Model = Counter option
+type Model = {
+    switches: Switches
+  } with
+    static member empty = { switches=[] }
 
 type Msg =
-| Increment
-| Decrement
-| Init of Result<Counter, exn>
+  | Init of Result<Switches, exn>
+  | UpdateSwitchState of Result<Switches, exn>
+  | Toggle of Toggle
+
+
+let swApi = 
+  let routeBuilder typeName methodName = 
+    sprintf "/api/%s/%s" typeName methodName
+  Fable.Remoting.Client.Proxy.createWithBuilder<SwApp> routeBuilder
 
 let init () = 
-  let model = None
+  let model = Model.empty
   let cmd =
-    let routeBuilder typeName methodName = 
-      sprintf "/api/%s/%s" typeName methodName
-    let api = Fable.Remoting.Client.Proxy.createWithBuilder<Init> routeBuilder
     Cmd.ofAsync 
-      api.getCounter
+      swApi.getSwitches
       () 
       (Ok >> Init)
       (Error >> Init)
   model, cmd
 
-let update msg (model : Model) =
-  let model' =
-    match model,  msg with
-    | Some x, Increment -> Some (x + 1)
-    | Some x, Decrement -> Some (x - 1)
-    | None, Init (Ok x) -> Some x
-    | _ -> None
-  model', Cmd.none
+let update msg (model : Model) : (Model*Cmd<Msg>)=
+    match model, msg with
+    | m, Init (Ok sw) -> printf "init: %A" sw; { m with switches=sw }, Cmd.none
+    | m, Init (Error e) -> printf "init error: %A" e; m, Cmd.none
+    | m, UpdateSwitchState (Ok sw) -> { m with switches=sw }, Cmd.none
+    | m, UpdateSwitchState (Error e) -> printf "init error: %A" e; m, Cmd.none
+    | m, Toggle toggle -> 
+        let cmd =
+            Cmd.ofAsync 
+              swApi.setSwitch
+              toggle
+              (Ok >> UpdateSwitchState)
+              (Error >> UpdateSwitchState)
+        m,cmd
+    //| m -> m, Cmd.none
 
-let safeComponents =
-  let intersperse sep ls =
-    List.foldBack (fun x -> function
-      | [] -> [x]
-      | xs -> x::sep::xs) ls []
+let renderSwitch sw (dispatch:Msg->unit) =
+  let toggle _ =
+    let nextState = match sw.state with On -> Off | Off -> On
+    dispatch (Toggle(sw.channel,nextState))
+  [ Button.button_btn
+      [ Button.onClick toggle; (if sw.state = On then Button.isPrimary else Button.isDark) ]
+      [ str sw.name ]
+    str (sprintf "%A" sw.mode)
+  ]
 
-  let components =
-    [ 
-      "Suave.IO", "http://suave.io" 
-      "Fable"   , "http://fable.io"
-      "Elmish"  , "https://fable-elmish.github.io/"
-      "Fulma"   , "https://mangelmaxime.github.io/Fulma" 
-      "Fable.Remoting", "https://github.com/Zaid-Ajaj/Fable.Remoting"
-    ]
-    |> List.map (fun (desc,link) -> a [ Href link ] [ str desc ] )
-    |> intersperse (str ", ")
-    |> span [ ]
-
-  p [ ]
-    [ strong [] [ str "SAFE Template" ]
-      str " powered by: "
-      components ]
-
-let show = function
-| Some x -> string x
-| None -> "Loading..."
+let show model = 
+    match model.switches with
+    | [] -> "Loading..."
+    | x -> sprintf "%A" x
 
 let button txt onClick = 
   Button.button_btn
@@ -78,23 +80,24 @@ let button txt onClick =
       Button.onClick onClick ] 
     [ str txt ]
 
-let view model dispatch =
+let view model (dispatch:Msg->unit) =
   div []
     [ Navbar.navbar [ Navbar.customClass "is-primary" ]
         [ Navbar.item_div [ ]
             [ Heading.h2 [ ]
-                [ str "SAFE Template" ] ] ]
+                [ str "Home navigation" ] ] ]
 
       Container.container []
-        [ Content.content [ Content.customClass Bulma.Level.Item.HasTextCentered ] 
-            [ Heading.h3 [] [ str ("Press buttons to manipulate counter: " + show model) ] ]
-          Columns.columns [] 
-            [ Column.column [] [ button "-" (fun _ -> dispatch Decrement) ]
-              Column.column [] [ button "+" (fun _ -> dispatch Increment) ] ] ]
-    
+        [ //Content.content [ Content.customClass Bulma.Level.Item.HasTextCentered ] 
+          //  [ Heading.h3 [] [ str ("Switches: "); str (show model) ] ]
+          //Columns.columns [] 
+          Content.content []
+            (model.switches |> List.map (fun sw -> Column.column [] (renderSwitch sw dispatch)))
+        ]
+
       Footer.footer [ ]
         [ Content.content [ Content.customClass Bulma.Level.Item.HasTextCentered ]
-            [ safeComponents ] ] ]
+            [ str "footer text" ] ] ]
   
 #if DEBUG
 open Elmish.Debug

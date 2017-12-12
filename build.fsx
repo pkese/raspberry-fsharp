@@ -3,6 +3,8 @@
 open System
 
 open Fake
+open SCPHelper
+open FileSystemHelper
 
 let serverPath = "./src/Server" |> FullName
 let serverProj = serverPath </> "Server.fsproj"
@@ -51,6 +53,24 @@ Target "Build" (fun () ->
   run dotnetCli "fable webpack -- -p" clientPath
 )
 
+Target "Go" (fun() -> 
+  run dotnetCli "build --no-restore" serverPath
+  !! "*.dll"
+    |> SetBaseDir (serverPath </> "bin/linux-arm/Debug/netcoreapp2.0")
+    |> Seq.map (fun file -> printfn "upload %s" file; file)
+    |> Seq.iter (fun file -> SCP id file "pidom:srv")
+  let sshConfig = (fun p -> { p with RemoteHost="pidom"; RemoteUser="peter" })
+  SSH sshConfig "dotnet/dotnet srv/Server.dll"
+)
+
+Target "FullPush" (fun() -> 
+  run dotnetCli "publish" serverPath
+  SCP id (serverPath </> "bin/linux-arm/Debug/netcoreapp2.0/*.dll") "pidom:srv"
+  let sshConfig = (fun p -> { p with RemoteHost="pidom"; RemoteUser="peter" })
+  SSH sshConfig "killall -e dotnet"
+  SSH sshConfig "/bin/sh -O huponexit -c \\\"dotnet/dotnet srv/Server.dll\\\""
+)
+
 Target "Run" (fun () ->
   let server = async {
     run dotnetCli "watch run" serverPath
@@ -63,15 +83,16 @@ Target "Run" (fun () ->
     Diagnostics.Process.Start "http://localhost:8080" |> ignore
   }
 
-  [ server; client; browser]
+  //[ server; client; browser]
+  [client]
   |> Async.Parallel
   |> Async.RunSynchronously
   |> ignore
 )
 
 "Clean"
-  ==> "InstallDotNetCore"
-  ==> "InstallClient"
+//  ==> "InstallDotNetCore"
+//  ==> "InstallClient"
   ==> "Build"
 
 "InstallClient"
