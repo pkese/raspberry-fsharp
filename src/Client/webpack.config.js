@@ -40,6 +40,12 @@ module.exports = {
       '/api/*': {
         target: `http://${proxyHost}:${port}`,
         changeOrigin: true
+      },
+      '/wsapi*': {
+        target: `ws://${proxyHost}:${port}`,
+        changeOrigin: true,
+        ws: true,
+        secure: false
       }
     },
     hot: true,

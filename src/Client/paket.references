@@ -1,9 +1,10 @@
+Fable.Websockets.Elmish
 group Client
-  FSharp.Core
-  Fable.Elmish.Debugger
-  Fable.Elmish.React
-  Fable.Elmish.HMR
-  Fable.Core
-  dotnet-fable
-  Fulma
-  Fable.Remoting.Client
+FSharp.Core
+Fable.Elmish.Debugger
+Fable.Elmish.React
+Fable.Elmish.HMR
+Fable.Core
+dotnet-fable
+Fulma
+Fable.Remoting.Client

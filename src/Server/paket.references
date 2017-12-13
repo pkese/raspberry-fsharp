@@ -1,5 +1,7 @@
+Fable.Websockets.Suave
+Fable.Elmish
 group Server
-  FSharp.Core
-  Suave
-  Microsoft.DotNet.Watcher.Tools
-  Fable.Remoting.Suave
+FSharp.Core
+Suave
+Microsoft.DotNet.Watcher.Tools
+Fable.Remoting.Suave

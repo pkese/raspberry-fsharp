@@ -65,10 +65,10 @@ Target "Go" (fun() ->
 
 Target "FullPush" (fun() -> 
   run dotnetCli "publish" serverPath
-  SCP id (serverPath </> "bin/linux-arm/Debug/netcoreapp2.0/*.dll") "pidom:srv"
+  SCP id (serverPath </> "bin/linux-arm/Debug/netcoreapp2.0/publish") "pidom:srv"
   let sshConfig = (fun p -> { p with RemoteHost="pidom"; RemoteUser="peter" })
   SSH sshConfig "killall -e dotnet"
-  SSH sshConfig "/bin/sh -O huponexit -c \\\"dotnet/dotnet srv/Server.dll\\\""
+  SSH sshConfig "dotnet/dotnet srv/Server.dll"
 )
 
 Target "Run" (fun () ->

@@ -2,13 +2,13 @@
 namespace Switches
 
 type Channel = Sw1 | Sw2 | Sw3 | Sw4 | SwAll
-type State = On | Off
-type Toggle = Channel * State
+type OnOff = Off | On
+type Toggle = Channel * OnOff
 type SwitchMode = Manual | Auto | Presence
 
 type Switch = {
     channel: Channel
-    state: State
+    state: OnOff
     name: string
     mode: SwitchMode
   } 

@@ -2,10 +2,18 @@
 module App
 
 open System
+open Elmish
 
 open Switches
 open EasyHome
 open Shared
+
+[<ReferenceEquality>]
+type Socket = { send: Events -> unit }
+
+type ClientEvent =
+    | Connected of Socket
+    | Disconnected of Socket
 
 type State = {
     switches: Switches
@@ -20,39 +28,13 @@ type State = {
         ]
     }
 
-
-let mutable state = State.empty
-let patchState updater = state <- updater state
-
-let getSwitches () = async {
-   return state.switches
-}
-let setSwitch (channel,swState) = async {
-    EasyHome.switches.Post (channel,swState)
-    let updateState (state:State) = 
-        let rec toggleInList = function
-          | [] -> []
-          | sw::tail when sw.channel = channel -> {sw with state=swState}::tail
-          | h::t -> h::(toggleInList t)
-        { state with switches = toggleInList state.switches }
-
-    patchState updateState
-    return state.switches
-}
-
-let setMode (channel,mode) = async {
-
-    let updateState (state:State) = 
-        let rec toggleInList = function
-          | [] -> []
-          | sw::tail when sw.channel = channel -> {sw with mode=mode}::tail
-          | h::t -> h::(toggleInList t)
-        { state with switches = toggleInList state.switches }
-
-    patchState updateState
-
-    return state.switches
-}
+type Msg = 
+    | Client of ClientEvent
+    | Command of Commands
+    | Send of Events
+    | SendTo of Socket*Events
+    | InitializeHw
+    | UpdateElectricityTariff of bool
 
 let awaitSequentially lst =
   let rec awaitSequentially' = function
@@ -61,9 +43,9 @@ let awaitSequentially lst =
       let! h' = h
       let! t' = awaitSequentially' t
       return h'::t'}
-  lst |> List.rev |> awaitSequentially'
+  lst |> awaitSequentially'
 
-let rec cheapElectricityFollower () = async {
+let updateElectricityTariff state withSchedule =
 
     let now = DateTime.Now
 
@@ -89,13 +71,13 @@ let rec cheapElectricityFollower () = async {
               | _, hour when hour >= 22 -> On
               | _, _ -> Off
 
-    do! state.switches
+    let msgs =
+        state.switches
         |> List.filter (fun sw -> sw.mode = Auto)
+        //|> List.filter (fun sw -> sw.state <> cheapElectricity)
         |> List.map (fun sw ->
             printfn "%A: auto %A -> %A" now sw.channel cheapElectricity
-            setSwitch (sw.channel,cheapElectricity))
-        |> awaitSequentially
-        |> Async.Ignore
+            Cmd.ofMsg (Command (SetSwitch (sw.channel, cheapElectricity))))
 
     let nextSwitch =
         let todayAt hour = now.Date.AddHours(float hour).AddSeconds(1.0)
@@ -108,9 +90,62 @@ let rec cheapElectricityFollower () = async {
         | _, hour, _ when hour < 22 -> todayAt 22
         | _ -> tomorrowAt 6
 
-    printfn "next switch at: %A / in: %A" nextSwitch (nextSwitch - DateTime.Now)
 
-    while (nextSwitch > DateTime.Now) do do! Async.Sleep (nextSwitch - DateTime.Now).Milliseconds
-    return! cheapElectricityFollower()
-  }
-cheapElectricityFollower() |> Async.Start
+    if withSchedule
+    then
+        printfn "next switch at: %A / in: %A" nextSwitch (nextSwitch - DateTime.Now)
+
+        let wait () = async {
+            while (nextSwitch > DateTime.Now) do
+                do! Async.Sleep (nextSwitch - DateTime.Now).Milliseconds
+            return (UpdateElectricityTariff true)
+        }
+        let schedule = Cmd.ofAsync wait () id (fun _ -> UpdateElectricityTariff true)
+        Cmd.batch (schedule::msgs)
+    else
+        Cmd.batch msgs
+
+let rec findAndModify channel modifier =
+    function
+    | [] -> []
+    | h::t when h.channel = channel -> (modifier h)::t
+    | h::t -> h::(findAndModify channel modifier t)
+
+let update (msg:Msg) (state:State) = //: State * Cmd<Msg> =
+    printfn "appMsg %A" msg
+    match msg with
+    | Client (Connected socket) ->
+        state, (Cmd.ofMsg (SendTo (socket,(Switches state.switches))))
+    
+    | Send _
+    | SendTo _
+    | Client (Disconnected _) -> state, Cmd.none
+
+    | InitializeHw ->
+        let cmds = updateElectricityTariff state true
+        state, cmds
+
+    | UpdateElectricityTariff withSchedule ->
+        let cmds = updateElectricityTariff state withSchedule
+        state, cmds
+
+    | Command GetSwitches -> 
+        state, (Cmd.ofMsg (Send (Switches state.switches)))
+
+    | Command (SetSwitch (channel,swState)) -> 
+        EasyHome.switches.Post (channel,swState)
+        let switches' = state.switches |> findAndModify channel (fun s -> { s with state=swState })
+        let cmd = Cmd.ofMsg (Send (Switches switches'))
+        { state with switches = switches' }, cmd
+    
+    | Command (SetMode (channel,mode)) ->
+        let switches' = state.switches |> findAndModify channel (fun s -> { s with mode=mode })
+        let cmd = 
+            let c = Cmd.ofMsg (Send (Switches switches'))
+            if mode = Auto
+            then Cmd.batch [c; Cmd.ofMsg (UpdateElectricityTariff false)]
+            else c
+        { state with switches = switches' }, cmd
+
+let init () = State.empty, (Cmd.ofMsg InitializeHw)
+

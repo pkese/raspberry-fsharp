@@ -24,7 +24,7 @@ module EasyHome =
                 File.WriteAllText("/sys/class/gpio/export","14", Text.Encoding.ASCII)
                 File.WriteAllText("/sys/class/gpio/gpio14/direction","out", Text.Encoding.ASCII)
             let file = File.OpenWrite "/sys/class/gpio/gpio14/value"
-            let toggleFn (toState:State) =
+            let toggleFn (toState:OnOff) =
                 match toState with On -> '1' | Off -> '0'
                     |> byte
                     |> file.WriteByte
