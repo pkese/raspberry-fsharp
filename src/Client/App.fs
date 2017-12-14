@@ -4,16 +4,13 @@ open Elmish
 open Elmish.React
 
 open Fable.Helpers.React
-module R = Fable.Helpers.React
 open Fable.Helpers.React.Props
-open Fable.PowerPack.Fetch
 
 open Fable.Websockets.Client
 open Fable.Websockets.Protocol
 open Fable.Websockets.Elmish
 open Fable.Websockets.Elmish.Types
 
-open Switches
 open Shared
 
 open Fulma
@@ -22,92 +19,105 @@ open Fulma.Elements
 open Fulma.Components
 open Fulma.BulmaClasses
 
-type ConnectionState = NotConnected | Connected    
-
-type Model = {
-    switches: Switches
-    connectionState: ConnectionState 
-    socket: SocketHandle<Commands,Events>
+type State = {
+    leds: Leds
+    socket: SocketHandle<Command,Notification> option
   } with
-    static member empty = {
-        switches=[]
-        connectionState=NotConnected
-        socket=SocketHandle.Blackhole()
-    }
+    static member empty = { leds=[]; socket=None }
+    member this.SocketCmd msg =
+        match this.socket with
+        | Some socket -> Cmd.ofSocketMessage socket msg
+        | None -> Cmd.none
 
 type AppMsg =
-  | Init
-  | Toggle of Toggle
+  | Connect
+  | SelectTrigger of Channel * string
 
-type MsgType = Msg<Commands,Events,AppMsg>
+type MsgType = Msg<Command,Notification,AppMsg>
 
-let appMsgUpdate (msg:AppMsg) (m : Model) =
+let onAppMsg (msg:AppMsg) (state:State) = // handle internal App messages
     match msg with
-    | Init ->
-        m, (Cmd.tryOpenSocket "ws://localhost:8080/wsapi")
-    | Toggle toggle -> 
-        m, (Cmd.ofSocketMessage m.socket (SetSwitch toggle))
-    //| _ -> m, Cmd.none
+    | Connect -> state, (Cmd.tryOpenSocket "ws://localhost:8080/wsapi")
+    | SelectTrigger (channel,trigger) -> state, (state.SocketCmd (SetTrigger (channel,trigger)))
 
-let serverEventUpdate msg (m : Model) =
-    printfn "event %A" msg
+let onServerNotification (msg:Notification) (state:State) = // handle shared socket message updates
     match msg with 
-    | Switches sw -> { m with switches=sw }, Cmd.none
+    | Leds leds -> { state with leds=leds }, Cmd.none
 
-let inline update msg prevState = 
-    printfn "msg %A" msg
+let inline update msg state = 
     match msg with
-    | ApplicationMsg amsg -> appMsgUpdate amsg prevState
-    | WebsocketMsg (socket, Opened) -> 
-        ({ prevState with socket = socket; connectionState = Connected }, Cmd.none)    
-    //| WebsocketMsg (socket, Closed) -> ({ prevState with socket = socket; connectionState = Connected }, Cmd.none)    
-    | WebsocketMsg (_, Msg socketMsg) -> (serverEventUpdate socketMsg prevState)
-    | _ -> (prevState, Cmd.none)
+    | ApplicationMsg amsg -> onAppMsg amsg state
+    | WebsocketMsg (socket, Opened) -> { state with socket = Some socket }, Cmd.none
+    | WebsocketMsg (_, WebsocketEvent.Closed _) -> { state with socket = None }, (Cmd.ofMsg (ApplicationMsg Connect)) // todo: add some incremental delay
+    | WebsocketMsg (_, Msg socketMsg) -> (onServerNotification socketMsg state)
+    | _ -> state, Cmd.none
 
 
-let renderSwitch sw (dispatch:MsgType->unit) =
-  let onClick _ =
-    let nextState = match sw.state with On -> Off | Off -> On
-    dispatch (ApplicationMsg (Toggle(sw.channel,nextState)))
-    ()
-  [ Button.button_btn
-      [ Button.onClick onClick; (if sw.state = On then Button.isPrimary else Button.isDark) ]
-      [ str sw.name ]
-    str (sprintf "%A" sw.mode)
-  ]
+// ---------------------- render html -------------------------------
 
-let show model = 
-    match model.switches with
-    | [] -> "Loading..."
-    | x -> sprintf "%A" x
+let renderSwitches led (dispatch:AppMsg->unit) =
+  let renderTriggerSwitch trigger =
+    Button.button_btn
+      [ Button.onClick (fun _ -> dispatch (SelectTrigger(led.channel,trigger)))
+        Button.props [Style [Margin 2]]
+        (if led.trigger = trigger then Button.isPrimary else Button.isDark)]
+      [ str trigger ]
 
-let button txt onClick = 
-  Button.button_btn
-    [ Button.isFullWidth
-      Button.isPrimary
-      Button.onClick onClick ] 
-    [ str txt ]
+  led.triggers |> List.map renderTriggerSwitch
+
+let footerComponents =
+  let intersperse sep ls =
+    List.foldBack (fun x -> function
+      | [] -> [x]
+      | xs -> x::sep::xs) ls []
+
+  let components =
+    [ 
+      "Suave.IO", "http://suave.io" 
+      "Fable"   , "http://fable.io"
+      "Elmish"  , "https://fable-elmish.github.io/"
+      "Fulma"   , "https://mangelmaxime.github.io/Fulma" 
+    ]
+    |> List.map (fun (desc,link) -> a [ Href link ] [ str desc ] )
+    |> intersperse (str ", ")
+    |> span [ ]
+
+  p [ ]
+    [ strong [] [ str "SAFE Template" ]
+      str " powered by: "
+      components]
 
 let view model dispatch =
+  let dispatch msg = dispatch (ApplicationMsg msg)
   div []
     [ Navbar.navbar [ Navbar.customClass "is-primary" ]
         [ Navbar.item_div [ ]
             [ Heading.h2 [ ]
                 [ str "Raspberry F#" ] ] ]
 
-      Container.container []
-        [ //Content.content [ Content.customClass Bulma.Level.Item.HasTextCentered ] 
-          //  [ Heading.h3 [] [ str ("Switches: "); str (show model) ] ]
-          //Columns.columns [] 
-          Content.content []
-            (model.switches |> List.map (fun sw -> Column.column [] (renderSwitch sw dispatch)))
-        ]
+      Container.container [Container.props [Style [MarginTop 30]]] (
+        if model.socket.IsSome
+        then
+            model.leds |> List.map (fun led -> 
+            Content.content [ Content.customClass Bulma.Level.Item.HasTextCentered ] 
+              [
+                Heading.h3 [] [ str (sprintf "%s led" led.color) ]
+                Column.column [] (renderSwitches led dispatch)
+              ])
+        else
+            [ Content.content [ Content.customClass Bulma.Level.Item.HasTextCentered ] 
+                [ Heading.h3 [] [ str "not connected..." ]]]
+
+      )
 
       Footer.footer [ ]
         [ Content.content [ Content.customClass Bulma.Level.Item.HasTextCentered ]
-            [ str "footer text" ] ] ]
+            [ footerComponents ] ] ]
 
-let init () = Model.empty, (Cmd.ofMsg (ApplicationMsg Init)) 
+
+// ---------------------- initialize -------------------------------
+
+let init () = State.empty, (Cmd.ofMsg (ApplicationMsg Connect)) 
 
 #if DEBUG
 open Elmish.Debug
@@ -116,11 +126,11 @@ open Elmish.HMR
 
 Program.mkProgram init update view
 #if DEBUG
-|> Program.withConsoleTrace
-|> Program.withHMR
+    |> Program.withConsoleTrace
+    |> Program.withHMR
 #endif
-|> Program.withReact "elmish-app"
+    |> Program.withReact "elmish-app"
 #if DEBUG
-|> Program.withDebugger
+    |> Program.withDebugger
 #endif
-|> Program.run
+    |> Program.run

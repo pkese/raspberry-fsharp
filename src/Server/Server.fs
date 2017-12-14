@@ -5,7 +5,6 @@ open Suave
 open Suave.Filters
 open Suave.Operators
 open Suave.Successful
-
 open Elmish
 open Fable.Websockets.Suave
 open Fable.Websockets.Protocol
@@ -21,79 +20,58 @@ let config =
       homeFolder = Some dirPath
       bindings = [ HttpBinding.create HTTP (IPAddress.Parse "0.0.0.0") port ] }
 
-type ServerState = { 
+type State = { 
     appState: App.State
     clients: Socket list
 }
 
 let initialize () =
     let appState, cmd = App.init ()
-    let initialState = { appState = appState; clients = [] }
-    initialState, cmd
-
+    { appState=appState; clients=[] }, cmd
 
 let update msg state =
-    let passState = 
+    let passStateToApp = 
         match msg with
-        | Client(Connected client) ->
+        | Client (Connected client) ->
             Some { state with clients = client::state.clients }
-        | Client(Disconnected client) ->
+        | Client (Disconnected client) ->
             Some { state with clients = state.clients |> List.where (fun c -> c <> client) }
-        | Send evt ->
+        | Client (SendAll evt) ->
             state.clients |> List.iter (fun c -> c.send evt)
             None
-        | SendTo (sock,evt) ->
-            sock.send evt
+        | Client (Send (socket,evt)) ->
+            socket.send evt
             None
         | _ -> Some state
-    match passState with
+    match passStateToApp with
         | Some state -> // dispatch msg also to App
-            printfn "srvMsg %A" msg
             let appState', cmd = App.update msg state.appState
             { state with appState = appState' }, cmd
         | None -> state, Cmd.none
 
-let webServer (dispatch:App.Msg -> unit) = 
+let onWebsocketConnect dispatch closeHandle socketEventSource socketEventSink = 
 
-    let onWebsocketConnection closeHandle socketEventSource socketEventSink = 
+    let socket = { send = socketEventSink }
 
-        let client = { send = socketEventSink }
+    let handleIncommingEvents : WebsocketEvent<Command> -> unit = function
+        | WebsocketEvent.Msg msg -> Command(socket,msg) |> dispatch
+        | WebsocketEvent.Opened -> Client (Connected socket) |> dispatch
+        | WebsocketEvent.Closed _ -> Client (Disconnected socket) |> dispatch
+        | WebsocketEvent.Error -> () // ...
+        | WebsocketEvent.Exception e -> printfn "Socket exception: %A" e
 
-        let handleIncomming (socketEvent:WebsocketEvent<Commands>) =
-            printfn "ws: %A" socketEvent
-            match socketEvent with
-            | WebsocketEvent.Msg msg -> Command(msg) |> dispatch
-            | WebsocketEvent.Opened -> Client (Connected client) |> dispatch
-            | WebsocketEvent.Closed _
-            | WebsocketEvent.Error
-            | WebsocketEvent.Exception _ ->
-                Client (Disconnected client) |> dispatch
+    socketEventSource |> Observable.subscribe handleIncommingEvents
 
-        socketEventSource |> Observable.subscribe handleIncomming
-
-    let webPart =
+let webServer (dispatch:App.AppMsg -> unit) = 
+    startWebServer config (
         choose [
             Files.browseHome
-            path "/wsapi" >=> websocket<Commands,Events> onWebsocketConnection
+            path "/wsapi" >=> websocket<Command,Notification> (onWebsocketConnect dispatch)
             GET >=> choose [ (path "/") >=> OK "Hello world" ]
-        ]
+        ])
 
-    startWebServer config webPart
+let webServerSubscription _ = Cmd.ofSub webServer
 
-let webServerSubscription _ =
-    let subscription dispatch =
-        printfn "Registering webserver, got dispatch..."
-        webServer dispatch
-        dispatch (UpdateElectricityTariff false)
-    Cmd.ofSub subscription
-
-let mutable first = true
-let view state dispatch =
-    printfn "%A" state
-    if first then
-        first <- false
-        dispatch InitializeHw
-
-Program.mkProgram initialize update view
+Program.mkProgram initialize update (fun state _ -> printfn "%A" state)
 |> Program.withSubscription webServerSubscription
 |> Program.run

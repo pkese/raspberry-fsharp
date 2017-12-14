@@ -53,7 +53,7 @@ Target "Build" (fun () ->
   run dotnetCli "fable webpack -- -p" clientPath
 )
 
-Target "Go" (fun() -> 
+Target "Pi" (fun() -> 
   run dotnetCli "build --no-restore" serverPath
   !! "*.dll"
     |> SetBaseDir (serverPath </> "bin/linux-arm/Debug/netcoreapp2.0")
@@ -63,7 +63,7 @@ Target "Go" (fun() ->
   SSH sshConfig "dotnet/dotnet srv/Server.dll"
 )
 
-Target "FullPush" (fun() -> 
+Target "PiFull" (fun() -> 
   run dotnetCli "publish" serverPath
   SCP id (serverPath </> "bin/linux-arm/Debug/netcoreapp2.0/publish") "pidom:srv"
   let sshConfig = (fun p -> { p with RemoteHost="pidom"; RemoteUser="peter" })

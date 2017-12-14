@@ -1,17 +1,19 @@
 namespace Shared
 
-open Switches
+type Channel = int
 
-type Commands = 
-  | GetSwitches
-  | SetSwitch of Channel*OnOff
-  | SetMode of Channel*SwitchMode
+type Led = {
+  channel: Channel
+  color: string
+  trigger: string
+  triggers: string list
+}
 
-type Events =
-  | Switches of Switches
+type Leds = Led list
 
-type SwApp = {
-    getSwitches: unit -> Async<Switches>
-    setSwitch: (Channel*OnOff) -> Async<Switches>
-    setMode: (Channel*SwitchMode) -> Async<Switches>
-  }
+type Command = // sent from client to server
+  | SetTrigger of Channel * string
+
+type Notification = // server event notification
+  | Leds of Leds
+
