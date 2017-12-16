@@ -1,9 +1,9 @@
 
-# F# full-stack IoT starter project for Raspberry PI 
+# F# full-stack IoT starter project for Raspberry Pi
 
 Raspberry Pi hosted [Suave](https://suave.io/) IoT app including [Fable](http://fable.io/) frontend providing browser access.  
 
-Based on [SAFE-template](https://github.com/SAFE-Stack/SAFE-template) this project adds minor modifications for targeting IoT:
+Based on [SAFE-template](https://github.com/SAFE-Stack/SAFE-template), this project adds minor modifications for targeting IoT:
 
 - IoT device with sensors will often need to push fresh data to all connected clients: all network traffic in both directions travels through [Websockets](https://github.com/ncthbrt/Fable.Websockets) instead of HTTP requests and responses.
 
@@ -19,7 +19,7 @@ Based on [SAFE-template](https://github.com/SAFE-Stack/SAFE-template) this proje
 - USB power adapter
 - ...and either
   - access to TV or monitor with HDMI input and USB Keyboard (just to configure WiFi), or
-  - Ethernet cable and free port on a switch with hacking capacity to figure out which IP was assigned to Raspberry by DHCP server.
+  - Ethernet cable and free port on a switch (with hacking capacity to figure out which IP was assigned to Raspberry by DHCP server).
 
 
 # Raspberry PI installation: from zero to IoT in 20 minutes
@@ -37,18 +37,18 @@ Installation instructions below are focusing on installing DotNet on a Raspberry
 
 Download the right Linux distribution for your version of Raspberry Pi...
 
-These instructions are for owners of Raspberry Pi 3, which is 64-bit, so we'll install a 64-bit operating system also known as `arm64` or `ARMv8`.
+These instructions are for owners of **Raspberry Pi 3**, which is 64-bit, so we'll install a 64-bit operating system also known as `arm64` or `ARMv8`.
 
-If you own a Raspberry Pi 2 you'll need to install a 32-bit `armhf` (aka `ARMv7`) OS instead. You can get one from [Debian](https://wiki.debian.org/RaspberryPi) or [Ubuntu](https://wiki.ubuntu.com/ARM/RaspberryPi), but in this case, your user credentials and WiFi/Timezone setup instructions might differ.
+If you own a **Raspberry Pi 2** you'll need to install a 32-bit `armhf` (aka `ARMv7`) OS instead. You can get one from [Debian](https://wiki.debian.org/RaspberryPi) or [Ubuntu](https://wiki.ubuntu.com/ARM/RaspberryPi), but in this case, your user credentials and WiFi/Timezone setup instructions might differ.
 
 **Avoid Raspbian** based distributions. They may not work, because they are compiled for `armel`, which Raspbian did in order to be able to run on old Raspberry Pi version 1 built on `ARMv6` architecture. DotNet Core however requires `ARMv7` or `ARMv8`, so it will only run on a Raspberry v2 or v3 with an operating system built for either `armhf` or `arm64`.
 
 *Notes:*  
 *Raspberry Pi 2 v1.2 produced after October 2016 also contains 64-bit ARMv8 processor similar to RPi 3. You may need a WiFi dongle though.*  
 *The `hf` in `armhf` stands for 'hardware floating point' which for 32-bit Arm became compulsory since ARMv7 (Raspberry Pi 2 and above).*  
-*All Raspberry Pi Zeros are (as of late 2017) based on ARMv6, so they are not compatible.*
+*All **Raspberry Pi Zeros** are (as of late 2017) based on ARMv6, so they are not compatible.*
 
-Some nice 64-bit Debian based images are available at https://github.com/bamarni/pi64/releases. Go ahead and download a recent `Lite` version.
+64-bit Debian based images are available at https://github.com/bamarni/pi64/releases. Go ahead and download a recent `Lite` version.
 
 Extract `.zip` archive and write the `.img` file to SD card.  
 
@@ -64,17 +64,17 @@ Extract `.zip` archive and write the `.img` file to SD card.
 After inserting the SD card into Raspberry, connect your HDMI cable and USB keyboard and power it up.  
 *Note: If the red LED turns off during boot, then your Pi is not getting enough juice and you should get a stronger USB power adapter (aim at least for 2 Amps; ideally 3).*
 
-Once booted, login as user `pi` and type `raspberry` for password.
+Once booted, login as user `pi` with password `raspberry`.
 
-Start by running pi64-config to configure your timezone and connect to your Wifi network:
+Start by configuring your timezone and connecting to your Wifi network:
 
     sudo pi64-config
 
-Login again after reboot and check if your internet connection is working
+Login again after reboot and check if your internet connection is working:
 
     ping 8.8.8.8
 
-If it is, then use it to freshen your linux packages:
+If yes, then use it to freshen your linux packages:
 
     sudo apt update
     sudo apt upgrade
@@ -83,7 +83,7 @@ Next, figure out what your local network address is so you can later access the 
 
     hostname -I
 
-That's it. You can now plug the HDMI and keyboard back to your main computer. The rest will be done remotely.
+That's it. Write down the address. You can now plug the HDMI and keyboard back to your main computer. The rest will be done remotely.
 
 ### b) When on cable
 
@@ -98,7 +98,7 @@ In my own case, the Pi's address was `192.168.11.90` so I'll just use this addre
 ## Configure SSH
 
 Try connecting to your Raspberry through ssh terminal from your own computer to see if connection can be established. Enter the same password as before: `raspberry`  
-*Note: If you are lacking ssh client, make sure to install Open SSH. Restart and repoen your console terminal window after installing.*
+*Note: If you are lacking ssh client, make sure to install Open SSH. Restart and reopen your console terminal window after installing.*
 
     ssh pi@192.168.11.90
 
@@ -106,7 +106,7 @@ Try connecting to your Raspberry through ssh terminal from your own computer to 
 
 You'll want to set up a password-less access to Raspberry by creating a pair of private and public security keys and then copying public key to Raspberry. To do that, run `ssh-keygen` on your computer which, will generate a pair of keys (in case you haven't done that already). Read the output of that command and see where it stored your keys in case you'll need to copy them manually.
 
-To copy the public key to your Raspberry, run the following on you local machine:
+Copy the public key to your Raspberry:
 
     ssh-copy-id pi@192.168.11.90
 
@@ -183,7 +183,7 @@ https://github.com/dotnet/core-setup/blob/release/2.0.0/README.md#officially-rel
 
 
 
-## Running the F# app
+## Run the F# app
 
 Go to the directory where you cloned this GitHub repository and edit `build.fsx` file.  
 Near the top of this file, you'll find:
@@ -196,6 +196,8 @@ Replace that address with the address of your Raspberry. Depending if you're run
     ./build.sh Publish
 
 If everything succeeded, you should see some output ending with `Smooth! Suave listener started in 520.29 with binding 0.0.0.0:8085`. Now navigate your browser to your own version of http://192.168.11.90:8085/ (remember to replace the address) and play with LEDs.
+
+**If that worked, then congratulations! -- You've made it.**
 
 To change any functionality, edit:
 
