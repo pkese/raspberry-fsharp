@@ -6,8 +6,12 @@ open Fake
 open SCPHelper
 open FileSystemHelper
 
+let raspberryHost = "192.168.11.90"
+let raspberryUser = "pi"
+
 let serverPath = "./src/Server" |> FullName
 let serverProj = serverPath </> "Server.fsproj"
+let serverBuildPath = serverPath </> "bin/linux-arm/Debug/netcoreapp2.0"
 let clientPath = "./src/Client" |> FullName
 
 let platformTool tool winTool =
@@ -49,26 +53,25 @@ Target "RestoreServer" (fun () ->
 )
 
 Target "Build" (fun () ->
-  run dotnetCli "build" serverPath
+  run dotnetCli "publish" serverPath
   run dotnetCli "fable webpack -- -p" clientPath
 )
 
 Target "Pi" (fun() -> 
   run dotnetCli "build --no-restore" serverPath
   !! "*.dll"
-    |> SetBaseDir (serverPath </> "bin/linux-arm/Debug/netcoreapp2.0")
+    |> SetBaseDir serverBuildPath
     |> Seq.map (fun file -> printfn "upload %s" file; file)
-    |> Seq.iter (fun file -> SCP id file "pidom:srv")
-  let sshConfig = (fun p -> { p with RemoteHost="pidom"; RemoteUser="peter" })
-  SSH sshConfig "dotnet/dotnet srv/Server.dll"
+    |> Seq.iter (fun file -> SCP id file (sprintf "%s@%s:Server" raspberryUser raspberryHost))
+  let sshConfig = (fun p -> { p with RemoteHost=raspberryHost; RemoteUser=raspberryUser })
+  SSH sshConfig "cd Server && sudo ../dotnet/dotnet Server.dll"
 )
 
-Target "PiFull" (fun() -> 
-  run dotnetCli "publish" serverPath
-  SCP id (serverPath </> "bin/linux-arm/Debug/netcoreapp2.0/publish") "pidom:srv"
-  let sshConfig = (fun p -> { p with RemoteHost="pidom"; RemoteUser="peter" })
-  SSH sshConfig "killall -e dotnet"
-  SSH sshConfig "dotnet/dotnet srv/Server.dll"
+Target "Publish" (fun() -> 
+  SCP id (serverBuildPath </> "publish") (sprintf "%s@%s:Server" raspberryUser raspberryHost)
+  SCP id clientPath (sprintf "%s@%s:Client" raspberryUser raspberryHost)
+  let sshConfig = (fun p -> { p with RemoteHost=raspberryHost; RemoteUser=raspberryUser })
+  SSH sshConfig "cd Server && sudo ../dotnet/dotnet Server.dll"
 )
 
 Target "Run" (fun () ->
@@ -90,9 +93,12 @@ Target "Run" (fun () ->
   |> ignore
 )
 
+"Build"
+  ==> "Publish"
+
 "Clean"
-//  ==> "InstallDotNetCore"
-//  ==> "InstallClient"
+  ==> "InstallDotNetCore"
+  ==> "InstallClient"
   ==> "Build"
 
 "InstallClient"

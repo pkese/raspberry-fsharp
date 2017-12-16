@@ -5,7 +5,7 @@ open Elmish.React
 
 open Fable.Helpers.React
 open Fable.Helpers.React.Props
-
+open Fable.Import.Browser
 open Fable.Websockets.Client
 open Fable.Websockets.Protocol
 open Fable.Websockets.Elmish
@@ -19,11 +19,15 @@ open Fulma.Elements
 open Fulma.Components
 open Fulma.BulmaClasses
 
+let websocketUrl = 
+    match location.port with
+    | "" ->   sprintf "ws://%s/wsapi"    location.hostname
+    | port -> sprintf "ws://%s:%s/wsapi" location.hostname port
+
 type State = {
     leds: Leds
     socket: SocketHandle<Command,Notification> option
   } with
-    static member empty = { leds=[]; socket=None }
     member this.SocketCmd msg =
         match this.socket with
         | Some socket -> Cmd.ofSocketMessage socket msg
@@ -37,7 +41,7 @@ type MsgType = Msg<Command,Notification,AppMsg>
 
 let onAppMsg (msg:AppMsg) (state:State) = // handle internal App messages
     match msg with
-    | Connect -> state, (Cmd.tryOpenSocket "ws://localhost:8080/wsapi")
+    | Connect -> state, (Cmd.tryOpenSocket websocketUrl)
     | SelectTrigger (channel,trigger) -> state, (state.SocketCmd (SetTrigger (channel,trigger)))
 
 let onServerNotification (msg:Notification) (state:State) = // handle shared socket message updates
@@ -49,9 +53,13 @@ let inline update msg state =
     | ApplicationMsg amsg -> onAppMsg amsg state
     | WebsocketMsg (socket, Opened) -> { state with socket = Some socket }, Cmd.none
     | WebsocketMsg (_, WebsocketEvent.Closed _) -> { state with socket = None }, (Cmd.ofMsg (ApplicationMsg Connect)) // todo: add some incremental delay
-    | WebsocketMsg (_, Msg socketMsg) -> (onServerNotification socketMsg state)
+    | WebsocketMsg (_, Msg socketMsg) -> onServerNotification socketMsg state
     | _ -> state, Cmd.none
 
+let init () = 
+    let initialState = { leds=[]; socket=None }
+    let startCommand = Cmd.ofMsg (ApplicationMsg Connect)
+    initialState, startCommand 
 
 // ---------------------- render html -------------------------------
 
@@ -115,9 +123,7 @@ let view model dispatch =
             [ footerComponents ] ] ]
 
 
-// ---------------------- initialize -------------------------------
-
-let init () = State.empty, (Cmd.ofMsg (ApplicationMsg Connect)) 
+// ---------------------- start -------------------------------
 
 #if DEBUG
 open Elmish.Debug

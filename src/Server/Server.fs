@@ -22,7 +22,7 @@ let config =
 
 type State = { 
     appState: App.State
-    clients: Socket list
+    clients: ClientSocket list
 }
 
 let initialize () =
@@ -65,9 +65,10 @@ let onWebsocketConnect dispatch closeHandle socketEventSource socketEventSink =
 let webServer (dispatch:App.AppMsg -> unit) = 
     startWebServer config (
         choose [
-            Files.browseHome
             path "/wsapi" >=> websocket<Command,Notification> (onWebsocketConnect dispatch)
-            GET >=> choose [ (path "/") >=> OK "Hello world" ]
+            GET >=> path "/" >=> Files.file (Path.Combine(dirPath,"index.html"))
+            GET >=> Files.browseHome
+            RequestErrors.NOT_FOUND "Page not found." 
         ])
 
 let webServerSubscription _ = Cmd.ofSub webServer
