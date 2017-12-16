@@ -36,15 +36,16 @@ type State = {
 type AppMsg =
   | Connect
   | SelectTrigger of Channel * string
+  // Add your own here
 
 type MsgType = Msg<Command,Notification,AppMsg>
 
-let onAppMsg (msg:AppMsg) (state:State) = // handle internal App messages
+let onAppMsg (msg:AppMsg) (state:State) = // handle internal App/UI messages
     match msg with
     | Connect -> state, (Cmd.tryOpenSocket websocketUrl)
     | SelectTrigger (channel,trigger) -> state, (state.SocketCmd (SetTrigger (channel,trigger)))
 
-let onServerNotification (msg:Notification) (state:State) = // handle shared socket message updates
+let onServerNotification (msg:Notification) (state:State) = // handle incoming notifications from RPi
     match msg with 
     | Leds leds -> { state with leds=leds }, Cmd.none
 
